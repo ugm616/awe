@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watch — AWE On Demand</title>
+<link rel="stylesheet" href="../css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+.player-shell{background:#0d0d0f;max-width:1020px;margin:20px auto;padding:0}
+.player-top{display:flex;align-items:center;gap:12px;padding:14px 16px}
+.player-top h1{font-family:"Barlow Condensed";font-size:26px;margin:0;color:var(--gold);flex:1}
+.player-frame{position:relative;aspect-ratio:16/9;background:#000}
+.player-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.player-foot{display:flex;gap:12px;align-items:center;padding:12px 16px;flex-wrap:wrap}
+.player-foot a{color:var(--gold);font-size:14px}
+.back{color:var(--gold);text-decoration:none;font-family:"Barlow Condensed"}
+.upnext{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;max-width:1020px;margin:0 auto 40px;padding:0 20px}
+.upnext a{background:#131316;text-decoration:none;color:#fff}
+.upnext img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#000;display:block}
+.upnext span{display:block;padding:8px 10px;font-family:"Barlow Condensed";color:var(--gold)}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="site-header__inner" style="display:flex;gap:20px;align-items:center;max-width:1220px;margin:0 auto;height:64px;padding:0 20px">
+<a class="back" href="index.html">← ON DEMAND</a><span style="flex:1"></span><a class="back" href="../index.html">AWE HOME</a>
+</div></header>
+<main style="padding:0 20px">
+<div class="player-shell">
+<div class="player-top"><h1 id="v-title">Loading…</h1><a id="v-rumble" href="#" target="_blank" rel="noopener" style="color:var(--gold);font-size:13px">Rumble ↗</a></div>
+<div class="player-frame"><iframe id="v-frame" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe></div>
+<div class="player-foot"><span class="muted" style="font-size:13px">Official Rumble player — ads stay on to support AWE.</span></div>
+</div>
+<h2 style="max-width:1020px;margin:20px auto;font-family:'Barlow Condensed'">UP NEXT</h2>
+<div class="upnext" id="upnext"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/content.js"></script>
+<script src="../js/cms-supabase.js"></script>
+<script src="../js/rumble-config.js"></script>
+<script src="../js/rumble-front.js"></script>
+<script>
+async function init() {
+  const id = new URLSearchParams(location.search).get('v') || '';
+  const videos = await aweLoadRumbleVideos();
+  const current = videos.find((v) => v.id === id) || videos[0];
+  if (!current) { document.getElementById('v-title').textContent = 'No videos yet'; return; }
+  document.title = current.title + ' — AWE';
+  document.getElementById('v-title').textContent = current.title;
+  document.getElementById('v-frame').src = current.embedUrl || aweRumbleEmbed(current.id);
+  document.getElementById('v-rumble').href = current.pageUrl || ('https://rumble.com/' + current.id);
+  const up = document.getElementById('upnext');
+  videos.filter((v) => v.id !== current.id).slice(0, 8).forEach((v) => {
+    const a = document.createElement('a');
+    a.href = 'watch.html?v=' + encodeURIComponent(v.id);
+    a.innerHTML = `<img loading="lazy"><span></span>`;
+    a.querySelector('img').src = v.thumbnail || '';
+    a.querySelector('span').textContent = v.title || v.id;
+    up.appendChild(a);
+  });
+}
+init();
+</script>
+</body>
+</html>

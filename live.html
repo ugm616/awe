@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live — AWE</title>
+<link rel="stylesheet" href="css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+.live-wrap{max-width:1220px;margin:0 auto;padding:20px}
+.live-head{display:flex;align-items:center;gap:12px}
+.live-badge{background:#c00;color:#fff;font-family:"Barlow Condensed";font-weight:700;padding:4px 10px;letter-spacing:.08em;display:none}
+.live-badge.on{display:inline-block;animation:pulse 1.6s infinite}
+@keyframes pulse{50%{opacity:.55}}
+.live-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-top:14px}
+@media(max-width:900px){.live-grid{grid-template-columns:1fr}}
+.player-shell{background:#0d0d0f}
+.player-top{padding:12px 14px;font-family:"Barlow Condensed";font-size:22px;color:var(--gold)}
+.player-frame{position:relative;aspect-ratio:16/9;background:#000}
+.player-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.chat-shell{background:#131316;display:flex;flex-direction:column;min-height:480px}
+.chat-shell h3{font-family:"Barlow Condensed";margin:0;padding:12px 14px;color:var(--gold);text-transform:uppercase}
+.chat-frame{flex:1;min-height:420px;background:#0a0a0b}
+.chat-frame iframe{width:100%;height:100%;min-height:420px;border:0;background:#0a0a0b}
+.chat-note{padding:10px 14px;font-size:13px;color:var(--muted)}
+.chat-note a{color:var(--gold)}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="site-header__inner" style="display:flex;gap:20px;align-items:center;max-width:1220px;margin:0 auto;height:64px;padding:0 20px">
+<a href="index.html" style="color:var(--gold);font-family:'Barlow Condensed';font-weight:700;text-decoration:none">← AWE</a>
+<strong style="font-family:'Barlow Condensed';font-size:24px">LIVE</strong>
+<span style="flex:1"></span>
+<a href="ondemand/index.html" style="color:var(--gold);font-family:'Barlow Condensed';text-decoration:none">ON DEMAND</a>
+</div></header>
+<main class="live-wrap">
+<div class="live-head"><h1 id="live-title" style="font-family:'Barlow Condensed';font-size:44px;margin:0">AWE LIVE</h1><span id="live-badge" class="live-badge">● LIVE</span></div>
+<p class="muted" id="live-sub">Official Rumble player — ads stay on to support AWE.</p>
+<div class="live-grid">
+<div class="player-shell">
+<div class="player-top" id="live-now">Set a live link in Admin → Live</div>
+<div class="player-frame"><iframe id="live-frame" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe></div>
+</div>
+<div class="chat-shell">
+<h3>Live chat</h3>
+<div class="chat-frame"><iframe id="chat-frame" title="Rumble live chat"></iframe></div>
+<div class="chat-note" id="chat-note"></div>
+</div>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/content.js"></script>
+<script src="js/cms-supabase.js"></script>
+<script src="js/rumble-config.js"></script>
+<script src="js/rumble-front.js"></script>
+<script>
+async function init() {
+  let live = loadContent().live || {};
+  try {
+    if (typeof aweInitCloud === 'function' && aweCloudEnabled()) {
+      aweInitCloud();
+      const { data } = await aweSupa.from('site_content').select('data').eq('id', 1).single();
+      if (data?.data?.live) live = { ...live, ...data.data.live };
+    }
+  } catch (e) { console.warn(e); }
+  const title = live.title || 'AWE LIVE';
+  document.getElementById('live-title').textContent = title;
+  document.getElementById('live-now').textContent = title;
+  document.title = title + ' — AWE';
+  const frame = document.getElementById('live-frame');
+  const chat = document.getElementById('chat-frame');
+  const badge = document.getElementById('live-badge');
+  if (live.isLive && live.videoUrl) badge.classList.add('on');
+  // official embed with pub preserved
+  let embed = '';
+  if (live.videoUrl && live.videoUrl.includes('rumble.com/embed')) {
+    embed = live.videoUrl.split('?')[0] + '?pub=' + (window.AWE_RUMBLE_PUB || 'z608t');
+  } else {
+    embed = aweRumbleEmbed(live.videoUrl || '');
+  }
+  if (embed) frame.src = embed;
+  // Chat: Rumble offers no separate styleable chat API. We frame the admin-provided
+  // chat/page URL in an AWE-styled dark panel. Inner chat colours remain Rumble's
+  // (cross-origin iframes can't be re-skinned).
+  if (live.chatUrl) {
+    chat.src = live.chatUrl;
+    document.getElementById('chat-note').innerHTML = 'Chat is hosted by Rumble — <a href="' + live.chatUrl + '" target="_blank" rel="noopener">open in Rumble ↗</a>';
+  } else if (live.videoUrl) {
+    chat.src = live.videoUrl;
+    document.getElementById('chat-note').innerHTML = 'Add a dedicated chat URL in Admin → Live for a cleaner chat pane. <a href="' + live.videoUrl + '" target="_blank" rel="noopener">Open in Rumble ↗</a>';
+  } else {
+    document.getElementById('chat-note').textContent = 'No live event scheduled. Check On Demand.';
+  }
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWE Admin</title>
+<link rel="stylesheet" href="css/style.css">
+<style>
+.admin-wrap{max-width:1100px;margin:0 auto;padding:20px}
+.admin-card{background:#131316;padding:18px;margin:14px 0}
+.admin-card h3{margin:0 0 10px;font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;font-size:24px}
+.admin-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.admin-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:8px 0}
+label{font-size:13px;color:var(--muted);display:grid;gap:4px}
+input,textarea,select{background:#000;color:#fff;border:1px solid #333;padding:9px 10px;font-size:14px;width:100%}
+textarea{min-height:70px;resize:vertical}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+button.btn-gold{background:var(--gold);color:#000;border:0;padding:10px 16px;font-weight:800;cursor:pointer}
+button.btn-ghost{background:transparent;color:var(--gold);border:1px solid var(--gold);padding:10px 16px;cursor:pointer}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.tabs button{background:#1c1c1f;color:#fff;border:0;padding:10px 14px;cursor:pointer}
+.tabs button.active{background:var(--gold);color:#000;font-weight:800}
+.item-box{border:1px solid #2a2a2e;padding:12px;margin:10px 0}
+.muted{color:var(--muted)}
+#login-box{max-width:460px;margin:60px auto}
+.role-badge{display:inline-block;background:var(--gold);color:#000;font-weight:800;font-size:12px;padding:2px 8px;margin-left:8px;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="admin-wrap">
+  <p><a href="index.html" style="color:var(--gold)">← View site</a> <span id="mode-badge" class="muted"></span></p>
+  <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:48px;margin:0">AWE ADMIN <span id="role-badge"></span></h1>
+  <p class="muted" id="admin-desc">Control menus, hero, top stories, news posts, images, URLs, video embeds, colours.</p>
+
+  <div id="login-box" class="admin-card">
+    <h3>Login</h3>
+    <div id="cloud-login">
+      <label>Email<input type="email" id="email" placeholder="you@company.com"></label>
+      <label>Password<input type="password" id="pw" placeholder="••••••••"></label>
+      <div class="btn-row"><button class="btn-gold" id="login-btn">Login with Supabase</button></div>
+      <p class="muted">Users managed in Supabase Auth. First user: promote to <code>admin</code> in Table Editor → profiles. See <code>supabase/README.md</code>.</p>
+    </div>
+    <div id="local-login" hidden>
+      <label>Password<input type="password" id="pw-local" placeholder="Default: aweadmin"></label>
+      <div class="btn-row"><button class="btn-gold" id="login-local-btn">Login locally</button></div>
+    </div>
+  </div>
+
+  <div id="admin-app" hidden>
+    <div class="btn-row"><span id="user-line" class="muted"></span><button class="btn-ghost" id="logout-btn">Logout</button></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="tab-body"></div>
+    <div class="admin-card">
+      <h3>Save / Backup</h3>
+      <div class="btn-row">
+        <button class="btn-gold" id="save-btn">Save all → update site</button>
+        <button class="btn-ghost" id="preview-btn">Preview site</button>
+        <button class="btn-ghost" id="export-btn">Export JSON</button>
+        <button class="btn-ghost" id="reset-btn">Reset to defaults</button>
+        <label style="flex:1">Import JSON<input type="file" id="import-file" accept=".json,application/json"></label>
+      </div>
+      <p class="muted" id="save-status"></p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/content.js"></script>
+<script src="js/cms-supabase.js"></script>
+<script>
+const PW_KEY = 'awe_admin_pw';
+if (!localStorage.getItem(PW_KEY)) localStorage.setItem(PW_KEY, 'aweadmin');
+let draft = loadContent();
+let originalPosts = JSON.parse(JSON.stringify(draft.posts || []));
+let currentTab = 'menus';
+let myRole = 'local';
+let cloudMode = false;
+
+const ALL_TABS = [
+  ['menus','Menus','admin'], ['hero','Hero','admin'], ['top','Top Stories','editor'],
+  ['posts','News Posts','editor'], ['video','Featured Video','editor'],
+  ['live','Live','editor'], ['rumble','Rumble','admin'],
+  ['design','Design / Settings','admin'], ['users','Users','admin']
+];
+function visibleTabs() {
+  if (myRole === 'local' || myRole === 'admin') return ALL_TABS;
+  if (myRole === 'editor') return ALL_TABS.filter((t) => t[2] === 'editor');
+  return []; // viewer: read-only, no tabs
+}
+
+async function init() {
+  cloudMode = aweCloudEnabled();
+  document.getElementById('mode-badge').textContent = cloudMode ? '• shared cloud (Supabase)' : '• local mode (add Supabase keys for multi-user)';
+  document.getElementById('cloud-login').hidden = !cloudMode;
+  document.getElementById('local-login').hidden = cloudMode;
+  if (!cloudMode) {
+    document.getElementById('login-local-btn').onclick = () => {
+      if (document.getElementById('pw-local').value === localStorage.getItem(PW_KEY)) {
+        myRole = 'local';
+        document.getElementById('login-box').hidden = true;
+        document.getElementById('admin-app').hidden = false;
+        render();
+      } else alert('Wrong password');
+    };
+    return;
+  }
+  aweInitCloud();
+  // restore session
+  const { data: { session } } = await aweSupa.auth.getSession();
+  if (session) await afterLogin();
+  document.getElementById('login-btn').onclick = async () => {
+    const email = document.getElementById('email').value.trim();
+    const pw = document.getElementById('pw').value;
+    const { error } = await aweSupa.auth.signInWithPassword({ email, password: pw });
+    if (error) { alert(error.message); return; }
+    await afterLogin();
+  };
+  document.getElementById('logout-btn').onclick = async () => {
+    if (cloudMode) await aweSupa.auth.signOut();
+    location.reload();
+  };
+}
+
+async function afterLogin() {
+  myRole = await aweGetRole() || 'viewer';
+  // load shared content
+  const cloud = await aweLoadCloud();
+  if (cloud?.site) {
+    draft = { ...draft, ...cloud.site, colors: { ...draft.colors, ...(cloud.site.colors || {}) } };
+    // migrate old cloud payloads: featuredVideo.youtubeUrl -> rumbleUrl
+    if (draft.featuredVideo && !draft.featuredVideo.rumbleUrl && cloud.site.featuredVideo?.youtubeUrl) {
+      draft.featuredVideo.rumbleUrl = cloud.site.featuredVideo.youtubeUrl;
+    }
+    if (draft.featuredVideo) delete draft.featuredVideo.youtubeUrl;
+    try { if (typeof normalizeMenus === 'function') normalizeMenus(draft.menus); } catch {}
+  }
+  if (cloud?.posts) {
+    // cloud posts use video_url; map already done in aweLoadCloud
+    draft.posts = cloud.posts;
+  } else if (cloudMode) {
+    // also fetch all incl unpublished for editors
+    const { data } = await aweSupa.from('posts').select('*').order('date', { ascending: false }).limit(200);
+    if (data) draft.posts = data.map((p) => ({ id: p.id, category: p.category, title: p.title, excerpt: p.excerpt, image: p.image, date: p.date, videoUrl: p.video_url, body: p.body, _published: p.published, _slug: p.slug }));
+  }
+  originalPosts = JSON.parse(JSON.stringify(draft.posts || []));
+  const { data: { user } } = await aweSupa.auth.getUser();
+  document.getElementById('user-line').textContent = `${user?.email || ''} — ${myRole}`;
+  document.getElementById('role-badge').innerHTML = `<span class="role-badge">${myRole}</span>`;
+  document.getElementById('login-box').hidden = true;
+  document.getElementById('admin-app').hidden = false;
+  if (myRole === 'viewer') {
+    document.getElementById('tab-body').innerHTML = '<div class="admin-card"><h3>Read-only</h3><p class="muted">Your role is viewer. Ask an admin to promote you to editor.</p></div>';
+    document.getElementById('save-btn').disabled = true;
+    return;
+  }
+  if (myRole === 'editor') currentTab = 'posts';
+  render();
+}
+
+function render() {
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = '';
+  visibleTabs().forEach(([key,label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (key === currentTab) b.classList.add('active');
+    b.onclick = () => { collect(); currentTab = key; render(); };
+    tabs.appendChild(b);
+  });
+  if (!visibleTabs().some((t) => t[0] === currentTab)) currentTab = visibleTabs()[0]?.[0] || 'posts';
+  const body = document.getElementById('tab-body');
+  body.innerHTML = '';
+  if (currentTab === 'menus') body.appendChild(menusEditor());
+  if (currentTab === 'hero') body.appendChild(heroEditor());
+  if (currentTab === 'top') body.appendChild(topEditor());
+  if (currentTab === 'posts') body.appendChild(postsEditor());
+  if (currentTab === 'video') body.appendChild(videoEditor());
+  if (currentTab === 'live') body.appendChild(liveEditor());
+  if (currentTab === 'rumble') body.appendChild(rumbleEditor());
+  if (currentTab === 'design') body.appendChild(designEditor());
+  if (currentTab === 'users') body.appendChild(usersEditor());
+}
+
+function collect() {
+  const body = document.getElementById('tab-body');
+  if (!body) return;
+  body.querySelectorAll('[data-path]').forEach((el) => setPath(draft, el.dataset.path, el.value));
+}
+function setPath(obj, path, val) {
+  const parts = path.split('.');
+  let o = obj;
+  for (let i=0;i<parts.length-1;i++) o = o[parts[i]];
+  o[parts[parts.length-1]] = val;
+}
+function field(path, value, label, type='text') {
+  const l = document.createElement('label');
+  l.textContent = label;
+  const inp = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+  if (type !== 'textarea') inp.type = type;
+  inp.value = value ?? '';
+  inp.dataset.path = path;
+  l.appendChild(inp);
+  return l;
+}
+
+function menusEditor() {
+  const wrap = document.createElement('div');
+  ['left','right'].forEach((side) => {
+    const card = document.createElement('div');
+    card.className = 'admin-card';
+    card.innerHTML = `<h3>${side === 'left' ? 'Left menu' : 'Right menu'}</h3><p class="muted">Label + URL. Subs = one per line as <code>Label | URL</code>.</p>`;
+    draft.menus[side].forEach((item, idx) => {
+      const box = document.createElement('div'); box.className = 'item-box';
+      const r = document.createElement('div'); r.className = 'admin-row';
+      const lIn = document.createElement('input'); lIn.value = item.label;
+      const uIn = document.createElement('input'); uIn.value = item.url || '#';
+      lIn.oninput = () => item.label = lIn.value;
+      uIn.oninput = () => item.url = uIn.value;
+      const ll = document.createElement('label'); ll.textContent = 'Label'; ll.appendChild(lIn);
+      const ul = document.createElement('label'); ul.textContent = 'URL'; ul.appendChild(uIn);
+      r.appendChild(ll); r.appendChild(ul); box.appendChild(r);
+      const sLab = document.createElement('label'); sLab.textContent = 'Submenu lines (Label | URL)';
+      const ta = document.createElement('textarea');
+      ta.value = (item.subs || []).map((s) => `${s.label} | ${s.url}`).join('\n');
+      ta.oninput = () => { item.subs = ta.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => { const [label, ...rest] = l.split('|'); return { label: (label||'').trim(), url: (rest.join('|')||'#').trim() }; }); };
+      sLab.appendChild(ta); box.appendChild(sLab);
+      const del = document.createElement('button'); del.className = 'btn-ghost'; del.textContent = 'Remove'; del.style.marginTop = '8px';
+      del.onclick = () => { draft.menus[side].splice(idx,1); render(); };
+      box.appendChild(del); card.appendChild(box);
+    });
+    const add = document.createElement('button'); add.className = 'btn-ghost'; add.textContent = '+ Add menu item';
+    add.onclick = () => { draft.menus[side].push({ label: 'New', url: '#', subs: [] }); render(); };
+    card.appendChild(add); wrap.appendChild(card);
+  });
+  return wrap;
+}
+function heroEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card'; c.innerHTML = '<h3>Hero</h3>';
+  const h = draft.hero;
+  c.appendChild(field('hero.eyebrow', h.eyebrow, 'Eyebrow'));
+  c.appendChild(field('hero.title', h.title, 'Title'));
+  c.appendChild(field('hero.body', h.body, 'Body', 'textarea'));
+  c.appendChild(field('hero.image', h.image, 'Hero image URL'));
+  c.appendChild(field('hero.videoUrl', h.videoUrl, 'Hero Rumble URL (watch or embed link, blank = use image)'));
+  const r = document.createElement('div'); r.className = 'admin-row';
+  r.appendChild(field('hero.cta1.label', h.cta1.label, 'Button 1 label'));
+  r.appendChild(field('hero.cta1.url', h.cta1.url, 'Button 1 URL')); c.appendChild(r);
+  const r2 = document.createElement('div'); r2.className = 'admin-row';
+  r2.appendChild(field('hero.cta2.label', h.cta2.label, 'Button 2 label'));
+  r2.appendChild(field('hero.cta2.url', h.cta2.url, 'Button 2 URL')); c.appendChild(r2);
+  return c;
+}
+function topEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card'; c.innerHTML = '<h3>Top Stories</h3>';
+  draft.topStories.forEach((s, i) => {
+    const box = document.createElement('div'); box.className = 'item-box';
+    const r = document.createElement('div'); r.className = 'admin-row3';
+    [['category','Category'],['title','Title'],['url','URL']].forEach(([k,lab]) => {
+      const inp = document.createElement('input'); inp.value = s[k] || '';
+      inp.oninput = () => s[k] = inp.value;
+      const l = document.createElement('label'); l.textContent = lab; l.appendChild(inp); r.appendChild(l);
+    });
+    box.appendChild(r);
+    const del = document.createElement('button'); del.className = 'btn-ghost'; del.textContent = 'Remove';
+    del.onclick = () => { draft.topStories.splice(i,1); render(); };
+    box.appendChild(del); c.appendChild(box);
+  });
+  const add = document.createElement('button'); add.className = 'btn-ghost'; add.textContent = '+ Add story';
+  add.onclick = () => { draft.topStories.push({ category: 'News', title: 'New story', url: '#' }); render(); };
+  c.appendChild(add); return c;
+}
+function postsEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card';
+  c.innerHTML = '<h3>News Posts</h3><p class="muted">Shared across all authors when Supabase is connected. Video = Rumble link → official embed (?pub kept, ads on).</p>';
+  draft.posts.forEach((p, i) => {
+    const box = document.createElement('div'); box.className = 'item-box';
+    box.innerHTML = `<strong>${p.title || 'Untitled'}</strong> <span class="muted">${p.date || ''}</span>`;
+    const grid = document.createElement('div');
+    [['category','Category'],['title','Title'],['date','Date (YYYY-MM-DD)'],['image','Image URL'],['videoUrl','Rumble URL'],['excerpt','Excerpt']].forEach(([k,lab]) => {
+      const l = document.createElement('label'); l.textContent = lab;
+      const inp = k === 'excerpt' ? document.createElement('textarea') : document.createElement('input');
+      inp.value = p[k] || ''; inp.oninput = () => p[k] = inp.value;
+      l.appendChild(inp); grid.appendChild(l);
+    });
+    box.appendChild(grid);
+    const bl = document.createElement('label'); bl.textContent = 'Body';
+    const bta = document.createElement('textarea'); bta.style.minHeight = '120px'; bta.value = p.body || '';
+    bta.oninput = () => p.body = bta.value;
+    bl.appendChild(bta); box.appendChild(bl);
+    const del = document.createElement('button'); del.className = 'btn-ghost'; del.textContent = 'Delete post'; del.style.marginTop = '8px';
+    del.onclick = () => { if (confirm('Delete this post?')) { draft.posts.splice(i,1); render(); } };
+    box.appendChild(del); c.appendChild(box);
+  });
+  const add = document.createElement('button'); add.className = 'btn-gold'; add.textContent = '+ New post';
+  add.onclick = () => { draft.posts.unshift({ id: 'post-' + Date.now(), category: 'News', title: 'New headline', excerpt: '', image: '', date: new Date().toISOString().slice(0,10), videoUrl: '', body: '' }); render(); };
+  c.appendChild(add); return c;
+}
+function videoEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card'; c.innerHTML = '<h3>Featured Video (Rumble)</h3>';
+  c.appendChild(field('featuredVideo.title', draft.featuredVideo.title, 'Title'));
+  c.appendChild(field('featuredVideo.rumbleUrl', draft.featuredVideo.rumbleUrl, 'Rumble URL (watch or embed link)'));
+  return c;
+}
+function liveEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card';
+  c.innerHTML = '<h3>Live</h3><p class="muted">Paste the Rumble live link. The live page uses the official embed (?pub kept) so ads stay on. Chat is framed in an AWE dark panel — inner Rumble chat colours cannot be re-skinned (cross-origin).</p>';
+  if (!draft.live) draft.live = { title: '', videoUrl: '', chatUrl: '', isLive: false };
+  c.appendChild(field('live.title', draft.live.title, 'Live title'));
+  c.appendChild(field('live.videoUrl', draft.live.videoUrl, 'Live Rumble URL (watch or embed link)'));
+  c.appendChild(field('live.chatUrl', draft.live.chatUrl, 'Chat URL (optional — defaults to video page)'));
+  const lab = document.createElement('label'); lab.textContent = 'Currently live?';
+  const sel = document.createElement('select');
+  [['false','No — show as offline'],['true','Yes — show LIVE badge']].forEach(([v, t]) => {
+    const o = document.createElement('option'); o.value = v; o.textContent = t;
+    if (String(!!draft.live.isLive) === v) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => draft.live.isLive = sel.value === 'true';
+  lab.appendChild(sel); c.appendChild(lab);
+  const open = document.createElement('a'); open.href = 'live.html'; open.target = '_blank';
+  open.style.color = 'var(--gold)'; open.textContent = 'Open live page →';
+  c.appendChild(open);
+  return c;
+}
+function rumbleEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card';
+  c.innerHTML = '<h3>Rumble / On Demand</h3><p class="muted">Channel + publisher ID (ads stay on). Daily sync runs via GitHub Action and writes <code>ondemand/videos.json</code> + Supabase <code>rumble_videos</code>.</p>';
+  if (!draft.rumble) draft.rumble = { channel: 'https://rumble.com/c/c-7961460', pub: 'z608t' };
+  c.appendChild(field('rumble.channel', draft.rumble.channel, 'Channel URL'));
+  c.appendChild(field('rumble.pub', draft.rumble.pub, 'Publisher ID (?pub=)'));
+  const row = document.createElement('div'); row.className = 'btn-row';
+  const syncBtn = document.createElement('button'); syncBtn.className = 'btn-ghost'; syncBtn.textContent = 'How to run sync';
+  syncBtn.onclick = () => alert('Local: node scripts/sync-rumble.mjs\nCloud: set SUPABASE_URL + SUPABASE_SERVICE_KEY env, or use the daily GitHub Action (.github/workflows/sync-rumble.yml).');
+  const open = document.createElement('a'); open.href = 'ondemand/index.html'; open.target = '_blank';
+  open.style.color = 'var(--gold)'; open.textContent = 'Open on-demand →';
+  row.appendChild(syncBtn); row.appendChild(open); c.appendChild(row);
+  return c;
+}
+function designEditor() {  const c = document.createElement('div'); c.className = 'admin-card'; c.innerHTML = '<h3>Design / Settings</h3>';
+  c.appendChild(field('logo', draft.logo, 'Logo image URL'));
+  [['header','Header BG'],['subbar','Submenu BG'],['gold','Gold'],['goldLight','Gold hover'],['bg','Page BG']].forEach(([k,lab]) => {
+    const row = document.createElement('div'); row.className = 'admin-row';
+    const col = document.createElement('input'); col.type = 'color';
+    col.value = /^#[0-9a-f]{6}$/i.test(draft.colors[k]||'') ? draft.colors[k] : '#000000';
+    col.oninput = () => draft.colors[k] = col.value;
+    const txt = document.createElement('input'); txt.value = draft.colors[k] || ''; txt.dataset.path = 'colors.' + k;
+    const l1 = document.createElement('label'); l1.textContent = lab + ' (picker)'; l1.appendChild(col);
+    const l2 = document.createElement('label'); l2.textContent = lab + ' (hex)'; l2.appendChild(txt);
+    row.appendChild(l1); row.appendChild(l2); c.appendChild(row);
+  });
+  return c;
+}
+function usersEditor() {
+  const c = document.createElement('div'); c.className = 'admin-card'; c.innerHTML = '<h3>Users & roles</h3><p class="muted">Admins only. Invite users in Supabase Auth, then set role here.</p><div id="users-list">Loading…</div>';
+  (async () => {
+    const { data, error } = await aweSupa.from('profiles').select('id,email,role,created_at').order('created_at');
+    const list = c.querySelector('#users-list');
+    if (error) { list.textContent = 'Failed: ' + error.message; return; }
+    list.innerHTML = '';
+    data.forEach((u) => {
+      const row = document.createElement('div'); row.className = 'item-box';
+      row.innerHTML = `<strong></strong> <span class="muted"></span> `;
+      row.querySelector('strong').textContent = u.email || u.id.slice(0,8);
+      row.querySelector('span').textContent = new Date(u.created_at).toLocaleDateString();
+      const sel = document.createElement('select');
+      ['admin','editor','viewer'].forEach((r) => { const o = document.createElement('option'); o.value = r; o.textContent = r; if (u.role === r) o.selected = true; sel.appendChild(o); });
+      sel.onchange = async () => {
+        const { error } = await aweSupa.from('profiles').update({ role: sel.value }).eq('id', u.id);
+        if (error) alert(error.message); else alert('Role updated');
+      };
+      row.appendChild(sel); list.appendChild(row);
+    });
+  })();
+  return c;
+}
+
+document.getElementById('save-btn').onclick = async () => {
+  collect();
+  if (!cloudMode) { saveContent(draft); document.getElementById('save-status').textContent = 'Saved locally ✓'; return; }
+  if (myRole === 'viewer') { alert('Viewers cannot save'); return; }
+  // editors: only posts/top/video allowed — still save those parts
+  const sitePayload = {
+    logo: draft.logo, colors: draft.colors, menus: draft.menus,
+    hero: draft.hero, topStories: draft.topStories, featuredVideo: draft.featuredVideo,
+    live: draft.live, rumble: draft.rumble, version: 1
+  };
+  if (myRole === 'admin') {
+    const ok = await aweSaveSiteCloud(sitePayload);
+    if (!ok) return;
+  }
+  // sync posts (both roles)
+  const { data: { user } } = await aweSupa.auth.getUser();
+  const origIds = new Set(originalPosts.map((p) => String(p.id)));
+  const curIds = new Set();
+  for (const p of draft.posts) {
+    const isUuid = /^[0-9a-f-]{36}$/i.test(String(p.id || ''));
+    const row = { category: p.category || 'News', title: p.title || 'Untitled', excerpt: p.excerpt || '', image: p.image || '', date: p.date || new Date().toISOString().slice(0,10), video_url: p.videoUrl || '', body: p.body || '', published: true, author_id: user.id, slug: String(p.title || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60) + '-' + Date.now().toString(36) };
+    if (isUuid && origIds.has(String(p.id))) {
+      curIds.add(String(p.id));
+      const { error } = await aweSupa.from('posts').update(row).eq('id', p.id);
+      if (error) { alert('Post update failed: ' + error.message); return; }
+    } else {
+      const { data, error } = await aweSupa.from('posts').insert(row).select('id').single();
+      if (error) { alert('Post create failed: ' + error.message); return; }
+      p.id = data.id; curIds.add(String(data.id));
+    }
+  }
+  for (const o of originalPosts) {
+    if (/^[0-9a-f-]{36}$/i.test(String(o.id)) && !curIds.has(String(o.id))) {
+      await aweSupa.from('posts').delete().eq('id', o.id);
+    }
+  }
+  // local backup too
+  saveContent(draft);
+  originalPosts = JSON.parse(JSON.stringify(draft.posts));
+  document.getElementById('save-status').textContent = 'Saved to shared cloud ✓ — all authors see it.';
+};
+document.getElementById('preview-btn').onclick = () => { collect(); saveContent(draft); location.href = 'index.html'; };
+document.getElementById('export-btn').onclick = () => {
+  collect();
+  const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'awe-content.json'; a.click();
+};
+document.getElementById('import-file').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { draft = JSON.parse(r.result); render(); } catch { alert('Invalid JSON'); } };
+  r.readAsText(f);
+};
+document.getElementById('reset-btn').onclick = () => {
+  if (confirm('Reset everything to defaults?')) { draft = structuredClone(DEFAULT_CONTENT); saveContent(draft); render(); }
+};
+
+init();
+</script>
+</body>
+</html>

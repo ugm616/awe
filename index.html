@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWE — Wrestling Company</title>
+<meta name="description" content="AWE — official home. Events, rankings, roster, news and watch.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="images/awe-logo.png" id="favicon">
+</head>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<header class="site-header" id="site-header">
+  <div class="site-header__inner">
+    <nav class="main-nav main-nav--left" aria-label="Primary left"><ul id="nav-left"></ul></nav>
+    <a href="/" class="site-logo" aria-label="AWE home">
+      <img id="awe-logo-img" src="images/awe-logo.png" alt="AWE" width="260" height="66" fetchpriority="high">
+      <span class="site-logo__fallback" id="awe-logo-fallback">AWE</span>
+    </a>
+    <nav class="main-nav main-nav--right" aria-label="Primary right"><ul id="nav-right"></ul></nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="search-toggle" aria-expanded="false" aria-label="Toggle search">⌕</button>
+      <button class="icon-btn menu-btn" id="menu-toggle" aria-expanded="false" aria-label="Toggle menu">☰</button>
+    </div>
+    <span class="nav-ink" id="nav-ink" aria-hidden="true"></span>
+  </div>
+  <div class="sub-bar" id="sub-bar" hidden>
+    <div class="sub-bar__inner"><ul id="sub-bar-list"></ul></div>
+  </div>
+  <div class="search-panel" id="search-panel" hidden>
+    <form action="#" method="get" role="search" onsubmit="return false">
+      <input type="search" id="site-search" placeholder="Search news..." aria-label="Search">
+    </form>
+  </div>
+  <div class="mobile-panel" id="mobile-panel" hidden><nav aria-label="Mobile" id="mobile-nav"></nav></div>
+</header>
+
+<main id="main-content">
+  <section class="hero">
+    <div class="hero__text">
+      <p class="eyebrow" id="hero-eyebrow"></p>
+      <h1 id="hero-title"></h1>
+      <p id="hero-body"></p>
+      <div id="hero-media"></div>
+      <div class="hero__cta">
+        <a href="#" class="btn btn--dark" id="hero-cta1">Final Results</a>
+        <a href="#" class="btn btn--light" id="hero-cta2">Watch Now</a>
+      </div>
+    </div>
+    <aside class="hero__side">
+      <h2>Top Stories</h2>
+      <ol id="top-stories"></ol>
+    </aside>
+  </section>
+
+  <section class="section" id="watch">
+    <div class="section__head"><h2>Featured Video</h2></div>
+    <div id="featured-video"></div>
+  </section>
+
+  <section class="section" id="news">
+    <div class="section__head"><h2>News</h2><a href="admin.html" class="admin-link">Manage in Admin →</a></div>
+    <div class="posts-grid" id="posts-grid"></div>
+  </section>
+
+  <section class="note"><p><a href="admin.html" style="color:var(--gold)">Open Admin → manage menus, hero, posts, images, videos, URLs</a></p></section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/rumble-config.js"></script>
+<script src="js/content.js"></script>
+<script src="js/cms-supabase.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

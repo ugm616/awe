@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>On Demand — AWE</title>
+<link rel="stylesheet" href="../css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+.vod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:16px}
+.vod-card{background:#131316;text-decoration:none;color:#fff;display:block}
+.vod-card img{width:100%;aspect-ratio:16/9;object-fit:cover;background:#000;display:block}
+.vod-card .t{padding:10px 12px;font-family:"Barlow Condensed",sans-serif;font-size:19px;color:var(--gold)}
+.vod-card .m{padding:0 12px 12px;font-size:12px;color:var(--muted)}
+.vod-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+</style>
+</head>
+<body>
+<header class="site-header"><div class="site-header__inner" style="display:flex;gap:20px;align-items:center;max-width:1220px;margin:0 auto;height:64px;padding:0 20px">
+<a href="../index.html" style="color:var(--gold);font-family:'Barlow Condensed';font-weight:700;text-decoration:none">← AWE</a>
+<strong style="font-family:'Barlow Condensed';font-size:24px">ON DEMAND</strong>
+<span style="flex:1"></span>
+<a href="../live.html" style="color:var(--gold);font-family:'Barlow Condensed';text-decoration:none">LIVE</a>
+</div></header>
+<main style="max-width:1220px;margin:0 auto;padding:20px">
+<div class="vod-head"><h1 style="font-family:'Barlow Condensed';font-size:44px;margin:0">ON DEMAND</h1><span id="vod-count" class="muted"></span></div>
+<p class="muted">Every video plays in the official Rumble player — ads stay on to support AWE. Synced daily from <a href="https://rumble.com/c/c-7961460" style="color:var(--gold)">rumble.com/c/c-7961460</a>.</p>
+<input id="vod-search" placeholder="Search videos..." style="width:100%;max-width:480px;background:#000;color:#fff;border:1px solid #333;padding:10px 12px">
+<div class="vod-grid" id="vod-grid"><p class="muted">Loading…</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/content.js"></script>
+<script src="../js/cms-supabase.js"></script>
+<script src="../js/rumble-config.js"></script>
+<script src="../js/rumble-front.js"></script>
+<script>
+let all = [];
+async function init() {
+  all = await aweLoadRumbleVideos();
+  document.getElementById('vod-count').textContent = all.length ? all.length + ' videos' : '';
+  render('');
+  document.getElementById('vod-search').addEventListener('input', (e) => render(e.target.value));
+}
+function render(q) {
+  const g = document.getElementById('vod-grid');
+  const query = (q || '').toLowerCase();
+  const list = all.filter((v) => !query || (v.title || '').toLowerCase().includes(query));
+  g.innerHTML = '';
+  if (!list.length) { g.innerHTML = '<p class="muted">No videos yet — run Admin → Rumble → Sync, or wait for the daily check.</p>'; return; }
+  list.forEach((v) => {
+    const a = document.createElement('a');
+    a.className = 'vod-card';
+    a.href = 'watch.html?v=' + encodeURIComponent(v.id);
+    a.innerHTML = `<img loading="lazy" alt=""><div class="t"></div><div class="m">Watch on AWE • Rumble ads support us</div>`;
+    a.querySelector('img').src = v.thumbnail || '';
+    a.querySelector('.t').textContent = v.title || v.id;
+    g.appendChild(a);
+  });
+}
+init();
+</script>
+</body>
+</html>
